@@ -22,10 +22,33 @@ Execute the program and run the terminal . Check the performance using nvprof.
 
 ## Program :
 ```python3
-#include "common.h"
 #include <cuda_runtime.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
+#include <windows.h>
+#include <device_launch_parameters.h>
+#include <windows.h>
 
+inline double seconds()
+{
+    LARGE_INTEGER t, f;
+    QueryPerformanceCounter(&t);
+    QueryPerformanceFrequency(&f);
+    return (double)t.QuadPart / (double)f.QuadPart;
+}
+#define CHECK(call)                                                            \
+{                                                                              \
+    const cudaError_t error = call;                                            \
+    if (error != cudaSuccess)                                                  \
+    {                                                                          \
+        fprintf(stderr, "Error: %s:%d, ", __FILE__, __LINE__);                 \
+        fprintf(stderr, "code: %d, reason: %s\n", error,                       \
+                cudaGetErrorString(error));                                    \
+        exit(1);                                                               \
+    }                                                                          \
+}
 /*
  * This example demonstrates the use of CUDA managed memory to implement matrix
  * addition. In this example, arbitrary pointers can be dereferenced on the host
@@ -38,23 +61,23 @@ Execute the program and run the terminal . Check the performance using nvprof.
  * cross-device reference is performed (as is required with zero copy and UVA).
  */
 
-void initialData(float *ip, const int size)
+void initialData(float* ip, const int size)
 {
     int i;
 
     for (i = 0; i < size; i++)
     {
-        ip[i] = (float)( rand() & 0xFF ) / 10.0f;
+        ip[i] = (float)(rand() & 0xFF) / 10.0f;
     }
 
     return;
 }
 
-void sumMatrixOnHost(float *A, float *B, float *C, const int nx, const int ny)
+void sumMatrixOnHost(float* A, float* B, float* C, const int nx, const int ny)
 {
-    float *ia = A;
-    float *ib = B;
-    float *ic = C;
+    float* ia = A;
+    float* ib = B;
+    float* ic = C;
 
     for (int iy = 0; iy < ny; iy++)
     {
@@ -71,14 +94,14 @@ void sumMatrixOnHost(float *A, float *B, float *C, const int nx, const int ny)
     return;
 }
 
-void checkResult(float *hostRef, float *gpuRef, const int N)
+void checkResult(float* hostRef, float* gpuRef, const int N)
 {
     double epsilon = 1.0E-8;
     bool match = 1;
 
     for (int i = 0; i < N; i++)
     {
-        if (abs(hostRef[i] - gpuRef[i]) > epsilon)
+        if (fabs(hostRef[i] - gpuRef[i]) > epsilon)
         {
             match = 0;
             printf("host %f gpu %f\n", hostRef[i], gpuRef[i]);
@@ -93,8 +116,8 @@ void checkResult(float *hostRef, float *gpuRef, const int N)
 }
 
 // grid 2D block 2D
-__global__ void sumMatrixGPU(float *MatA, float *MatB, float *MatC, int nx,
-                             int ny)
+__global__ void sumMatrixGPU(float* MatA, float* MatB, float* MatC, int nx,
+    int ny)
 {
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
     unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -106,7 +129,7 @@ __global__ void sumMatrixGPU(float *MatA, float *MatB, float *MatC, int nx,
     }
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     printf("%s Starting ", argv[0]);
 
@@ -121,7 +144,7 @@ int main(int argc, char **argv)
     int nx, ny;
     int ishift = 12;
 
-    if  (argc > 1) ishift = atoi(argv[1]);
+    if (argc > 1) ishift = atoi(argv[1]);
 
     nx = ny = 1 << ishift;
 
@@ -130,11 +153,11 @@ int main(int argc, char **argv)
     printf("Matrix size: nx %d ny %d\n", nx, ny);
 
     // malloc host memory
-    float *A, *B, *hostRef, *gpuRef;
-    CHECK(cudaMallocManaged((void **)&A, nBytes));
-    CHECK(cudaMallocManaged((void **)&B, nBytes));
-    CHECK(cudaMallocManaged((void **)&gpuRef,  nBytes);  );
-    CHECK(cudaMallocManaged((void **)&hostRef, nBytes););
+    float* A, * B, * hostRef, * gpuRef;
+    CHECK(cudaMallocManaged((void**)&A, nBytes));
+    CHECK(cudaMallocManaged((void**)&B, nBytes));
+    CHECK(cudaMallocManaged((void**)&gpuRef, nBytes); );
+    CHECK(cudaMallocManaged((void**)&hostRef, nBytes););
 
     // initialize data at host side
     double iStart = seconds();
@@ -160,17 +183,17 @@ int main(int argc, char **argv)
 
     // warm-up kernel, with unified memory all pages will migrate from host to
     // device
-    sumMatrixGPU<<<grid, block>>>(A, B, gpuRef, 1, 1);
+    sumMatrixGPU << <grid, block >> > (A, B, gpuRef, 1, 1);
 
     // after warm-up, time with unified memory
     iStart = seconds();
 
-    sumMatrixGPU<<<grid, block>>>(A, B, gpuRef, nx, ny);
+    sumMatrixGPU << <grid, block >> > (A, B, gpuRef, nx, ny);
 
     CHECK(cudaDeviceSynchronize());
     iElaps = seconds() - iStart;
     printf("sumMatrix on gpu :\t %f sec <<<(%d,%d), (%d,%d)>>> \n", iElaps,
-            grid.x, grid.y, block.x, block.y);
+        grid.x, grid.y, block.x, block.y);
 
     // check kernel error
     CHECK(cudaGetLastError());
